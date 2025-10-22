@@ -1,0 +1,22 @@
+# Environment and local config
+.env
+.TRvenv/
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# OS/editor artifacts
+.DS_Store
+
+# Local dev artifacts
+.venv/
+uploads/
+# testing_files/
+project_metadata/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+testing_files/reducto_files/output_json/*
+testing_files/reducto_files/output_json/.gitkeep
