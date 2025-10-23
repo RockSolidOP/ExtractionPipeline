@@ -15,9 +15,11 @@ from app.config import AZURE_CONFIG
 
 
 ML_LABEL_MODEL_MAP: Dict[str, str] = {
-    # 1040 main
-    "Form_1040_P1": AZURE_CONFIG.get("model_id_1040", "prebuilt-tax.us.1040"),
-    "Form_1040_P2": AZURE_CONFIG.get("model_id_1040", "prebuilt-tax.us.1040"),
+    # 1040 main — route to local template service for integration testing
+    # Special model ids with the prefix "local-template:" are intercepted in the pipeline
+    # and handled by app.services.local_template_service.
+    "Form_1040_P1": "local-template:Form 1040 Individual",
+    "Form_1040_P2": "local-template:Form 1040 Individual",
 
     # 1040 Schedule E
     "Schedule_E_P1": AZURE_CONFIG.get("model_id_1040_schedule_e", "prebuilt-tax.us.1040ScheduleE"),

@@ -27,6 +27,7 @@ import streamlit as st
 try:  # noqa: SIM105 - deliberate try/except import shim
     from app.services.azure_service import parse_with_azure_docint, azure_to_dict
     from app.services.ml_classify_service import classify_document_ml
+    from app.services.local_template_service import analyze_form_with_template
     from app.config_classifier_ml_labels import ML_LABEL_MODEL_MAP, SKIP_LABELS
 except ModuleNotFoundError:  # Running via `streamlit run pages/Extraction_Pipeline.py`
     import sys as _sys
@@ -37,6 +38,7 @@ except ModuleNotFoundError:  # Running via `streamlit run pages/Extraction_Pipel
         _sys.path.insert(0, str(_ROOT))
     from app.services.azure_service import parse_with_azure_docint, azure_to_dict
     from app.services.ml_classify_service import classify_document_ml
+    from app.services.local_template_service import analyze_form_with_template
     from app.config_classifier_ml_labels import ML_LABEL_MODEL_MAP, SKIP_LABELS
 from app.ui.components import download_json_button, file_uploader
 from app.utils.storage import save_uploaded_file
@@ -207,7 +209,15 @@ def _build_plan_generic(classified: List[ClassifiedPage]) -> Tuple[List[AzureJob
 
 
 def _analyze_with_azure(pdf_path: Path, *, model_id: str, pages: str) -> Any:
-    """Run only Document Intelligence client; do not fall back."""
+    """Dispatch to Azure or local template service based on model_id.
+
+    - If model_id starts with "local-template:", use the local form template service.
+    - Otherwise, use Azure Document Intelligence.
+    """
+    mid = (model_id or "").strip()
+    if mid.lower().startswith("local-template:"):
+        form_key = mid.split(":", 1)[1].strip() or "Form 1040 Individual"
+        return analyze_form_with_template(pdf_path, pages=pages, form_key=form_key)
     return parse_with_azure_docint(pdf_path, page_number=1, model_id=model_id, pages=pages)
 
 
@@ -324,7 +334,11 @@ def run() -> None:
             except Exception as e:
                 secs = perf_counter() - t0
                 api_total += secs
-                azure_results[job.job_id] = {"ok": False, "error": str(e)}
+                # Normalize exception message for local-template failures
+                msg = str(e)
+                if job.model_id.lower().startswith("local-template:") and not msg:
+                    msg = "Local template extraction failed"
+                azure_results[job.job_id] = {"ok": False, "error": msg}
                 job_timings.append({"job_id": job.job_id, "model_id": job.model_id, "pages": job.pages, "secs": secs, "ok": False, "error": str(e)})
 
             # Increment progress by number of pages in this job

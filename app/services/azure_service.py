@@ -20,8 +20,9 @@ from app.config import AZURE_CONFIG
 def create_azure_client() -> DocumentAnalysisClient:
     """Create an Azure Document Analysis client using env vars."""
     load_dotenv()
-    endpoint = os.getenv("AZURE_DOC_AI_ENDPOINT")
-    key = os.getenv("AZURE_DOC_AI_KEY")
+    # Prefer uppercase names; fall back to common lowercase variants
+    endpoint = os.getenv("AZURE_DOC_AI_ENDPOINT") or os.getenv("azure_endpoint")
+    key = os.getenv("AZURE_DOC_AI_KEY") or os.getenv("azure_key")
     if not endpoint or not key:
         raise RuntimeError("AZURE_DOC_AI_ENDPOINT or AZURE_DOC_AI_KEY not set in .env")
     return DocumentAnalysisClient(endpoint=endpoint, credential=AzureKeyCredential(key))
@@ -34,8 +35,9 @@ def create_docint_client() -> DocumentIntelligenceClient:
             "azure-ai-documentintelligence is not installed. Add it to requirements and pip install."
         )
     load_dotenv()
-    endpoint = os.getenv("AZURE_DOC_AI_ENDPOINT")
-    key = os.getenv("AZURE_DOC_AI_KEY")
+    # Prefer uppercase names; fall back to common lowercase variants
+    endpoint = os.getenv("AZURE_DOC_AI_ENDPOINT") or os.getenv("azure_endpoint")
+    key = os.getenv("AZURE_DOC_AI_KEY") or os.getenv("azure_key")
     if not endpoint or not key:
         raise RuntimeError("AZURE_DOC_AI_ENDPOINT or AZURE_DOC_AI_KEY not set in .env")
     return DocumentIntelligenceClient(endpoint=endpoint, credential=AzureKeyCredential(key))
