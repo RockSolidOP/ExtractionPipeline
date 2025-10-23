@@ -21,6 +21,9 @@ ML_LABEL_MODEL_MAP: Dict[str, str] = {
     "Form_1040_P1": "local-template:auto",
     "Form_1040_P2": "local-template:auto",
 
+    # Asset report (Schedule C) — route to Reducto schema with auto key
+    "Federal_Asset_Report_Schedule_C_P1": "reducto:schema:auto",
+
     # 1040 Schedules are temporarily disabled and added to SKIP_LABELS below.
     # Keeping these here as comment for reference if you want to re-enable later:
     # "Schedule_E_P1": AZURE_CONFIG.get("model_id_1040_schedule_e", "prebuilt-tax.us.1040ScheduleE"),
@@ -35,7 +38,7 @@ ML_LABEL_MODEL_MAP: Dict[str, str] = {
 
 # Labels that should be skipped (no Azure model selection/job creation)
 SKIP_LABELS: Set[str] = {
-    "Federal_Asset_Report_Schedule_C_P1",
+    # "Federal_Asset_Report_Schedule_C_P1",  # now routed to Reducto schema extraction
     "Federal_Asset_Report_Schedule_F_P1",
     "AMT_Asset_Report_Schedule_C_P1",
     "AMT_Asset_Report_Schedule_F_P1",

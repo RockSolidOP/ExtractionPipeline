@@ -26,6 +26,8 @@ import streamlit as st
 # Ensure project root is on sys.path when running this page directly
 try:  # noqa: SIM105 - deliberate try/except import shim
     from app.services.azure_service import parse_with_azure_docint, azure_to_dict, azure_fields_to_dict
+    from app.services.reducto_service import create_client as create_reducto_client, extract_with_schema as reducto_extract_with_schema
+    from app.services.reducto_schema_registry import get_schema_config_for_key
     from app.services.ml_classify_service import classify_document_ml
     from app.services.local_template_service import analyze_form_with_template
     from app.config_classifier_ml_labels import ML_LABEL_MODEL_MAP, SKIP_LABELS
@@ -37,6 +39,8 @@ except ModuleNotFoundError:  # Running via `streamlit run pages/Extraction_Pipel
     if str(_ROOT) not in _sys.path:
         _sys.path.insert(0, str(_ROOT))
     from app.services.azure_service import parse_with_azure_docint, azure_to_dict, azure_fields_to_dict
+    from app.services.reducto_service import create_client as create_reducto_client, extract_with_schema as reducto_extract_with_schema
+    from app.services.reducto_schema_registry import get_schema_config_for_key
     from app.services.ml_classify_service import classify_document_ml
     from app.services.local_template_service import analyze_form_with_template
     from app.config_classifier_ml_labels import ML_LABEL_MODEL_MAP, SKIP_LABELS
@@ -226,6 +230,18 @@ def _derive_form_key_from_label_hint(label_hint: str) -> Optional[str]:
         return None
 
 
+def _parse_pages_spec(pages: str) -> tuple[int, int]:
+    try:
+        s = str(pages or "").strip()
+        if "-" in s:
+            a, b = s.split("-", 1)
+            return (int(a), int(b)) if int(a) <= int(b) else (int(b), int(a))
+        v = int(s)
+        return (v, v)
+    except Exception:
+        return (1, 1)
+
+
 def _analyze_with_azure(pdf_path: Path, *, model_id: str, pages: str, label_hint: Optional[str] = None) -> Any:
     """Dispatch to Azure or local template service based on model_id.
 
@@ -244,6 +260,35 @@ def _analyze_with_azure(pdf_path: Path, *, model_id: str, pages: str, label_hint
         else:
             form_key = suffix
         return analyze_form_with_template(pdf_path, pages=pages, form_key=form_key)
+    if mid.lower().startswith("reducto:"):
+        # Expect forms: reducto:schema:<key> or reducto:schema:auto
+        suffix = mid.split(":", 1)[1].strip() if ":" in mid else ""
+        if suffix.lower().startswith("schema"):
+            parts = suffix.split(":", 1)
+            key = None
+            if len(parts) == 2:
+                # schema:<key>
+                key = parts[1].strip()
+            else:
+                # schema or schema:auto → infer
+                key = None
+            if not key or key.lower() == "auto":
+                key = _derive_form_key_from_label_hint(label_hint or "")
+            if not key:
+                raise RuntimeError("reducto:schema:auto could not derive schema key from labels")
+            cfg = get_schema_config_for_key(key)
+            start, end = _parse_pages_spec(pages)
+            client = create_reducto_client()
+            return reducto_extract_with_schema(
+                client,
+                pdf_path,
+                schema=cfg.get("schema", {}),
+                start_page=start,
+                end_page=end,
+                system_prompt=str(cfg.get("system_prompt", "")),
+            )
+        else:
+            raise RuntimeError(f"Unsupported Reducto mode: {suffix}")
     return parse_with_azure_docint(pdf_path, page_number=1, model_id=model_id, pages=pages)
 
 
@@ -404,7 +449,7 @@ def run() -> None:
                 try:
                     # For Azure models, show only document fields; for local-template, keep full result
                     res_obj = payload.get("result")
-                    if isinstance(job.model_id, str) and job.model_id.lower().startswith("local-template:"):
+                    if isinstance(job.model_id, str) and (job.model_id.lower().startswith("local-template:") or job.model_id.lower().startswith("reducto:")):
                         entry["result"] = res_obj
                     else:
                         entry["result"] = azure_fields_to_dict(res_obj)
