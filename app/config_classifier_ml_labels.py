@@ -15,23 +15,20 @@ from app.config import AZURE_CONFIG
 
 
 ML_LABEL_MODEL_MAP: Dict[str, str] = {
-    # 1040 main — route to local template service for integration testing
-    # Special model ids with the prefix "local-template:" are intercepted in the pipeline
-    # and handled by app.services.local_template_service.
-    "Form_1040_P1": "local-template:Form 1040 Individual",
-    "Form_1040_P2": "local-template:Form 1040 Individual",
+    # 1040 main — route to local template service using automatic template inference
+    # "local-template:auto" tells the pipeline to derive the template key from the ML label
+    # (e.g., Form_1040_P1 → Form_1040).
+    "Form_1040_P1": "local-template:auto",
+    "Form_1040_P2": "local-template:auto",
 
-    # 1040 Schedule E
-    "Schedule_E_P1": AZURE_CONFIG.get("model_id_1040_schedule_e", "prebuilt-tax.us.1040ScheduleE"),
-    "Schedule_E_P2": AZURE_CONFIG.get("model_id_1040_schedule_e", "prebuilt-tax.us.1040ScheduleE"),
-
-    # 1040 Schedule C (single-page mapping; pairs will reuse this)
-    "Schedule_C_P1": AZURE_CONFIG.get("model_id_1040_schedule_c", "prebuilt-tax.us.1040ScheduleC"),
-    "Schedule_C_P2": AZURE_CONFIG.get("model_id_1040_schedule_c", "prebuilt-tax.us.1040ScheduleC"),
-
-    # 1040 Schedule A / Schedule 1
-    "Schedule_A": AZURE_CONFIG.get("model_id_1040_schedule_a", "prebuilt-tax.us.1040ScheduleA"),
-    "Schedule_1": AZURE_CONFIG.get("model_id_1040_schedule1", "prebuilt-tax.us.1040Schedule1"),
+    # 1040 Schedules are temporarily disabled and added to SKIP_LABELS below.
+    # Keeping these here as comment for reference if you want to re-enable later:
+    # "Schedule_E_P1": AZURE_CONFIG.get("model_id_1040_schedule_e", "prebuilt-tax.us.1040ScheduleE"),
+    # "Schedule_E_P2": AZURE_CONFIG.get("model_id_1040_schedule_e", "prebuilt-tax.us.1040ScheduleE"),
+    # "Schedule_C_P1": AZURE_CONFIG.get("model_id_1040_schedule_c", "prebuilt-tax.us.1040ScheduleC"),
+    # "Schedule_C_P2": AZURE_CONFIG.get("model_id_1040_schedule_c", "prebuilt-tax.us.1040ScheduleC"),
+    # "Schedule_A": AZURE_CONFIG.get("model_id_1040_schedule_a", "prebuilt-tax.us.1040ScheduleA"),
+    # "Schedule_1": AZURE_CONFIG.get("model_id_1040_schedule1", "prebuilt-tax.us.1040Schedule1"),
 
     # Note: asset/adjustment reports are intentionally not routed here; see SKIP_LABELS below.
 }
@@ -44,4 +41,11 @@ SKIP_LABELS: Set[str] = {
     "AMT_Asset_Report_Schedule_F_P1",
     "Bonus_Depreciation_Report_Schedule_C_P1",
     "Depreciation_Adjustment_Report_P1",
+    # 1040 Schedules (disabled)
+    "Schedule_E_P1",
+    "Schedule_E_P2",
+    "Schedule_C_P1",
+    "Schedule_C_P2",
+    "Schedule_A",
+    "Schedule_1",
 }

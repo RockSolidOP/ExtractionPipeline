@@ -25,7 +25,7 @@ import streamlit as st
 
 # Ensure project root is on sys.path when running this page directly
 try:  # noqa: SIM105 - deliberate try/except import shim
-    from app.services.azure_service import parse_with_azure_docint, azure_to_dict
+    from app.services.azure_service import parse_with_azure_docint, azure_to_dict, azure_fields_to_dict
     from app.services.ml_classify_service import classify_document_ml
     from app.services.local_template_service import analyze_form_with_template
     from app.config_classifier_ml_labels import ML_LABEL_MODEL_MAP, SKIP_LABELS
@@ -36,7 +36,7 @@ except ModuleNotFoundError:  # Running via `streamlit run pages/Extraction_Pipel
     _ROOT = _Path(__file__).resolve().parents[1]
     if str(_ROOT) not in _sys.path:
         _sys.path.insert(0, str(_ROOT))
-    from app.services.azure_service import parse_with_azure_docint, azure_to_dict
+    from app.services.azure_service import parse_with_azure_docint, azure_to_dict, azure_fields_to_dict
     from app.services.ml_classify_service import classify_document_ml
     from app.services.local_template_service import analyze_form_with_template
     from app.config_classifier_ml_labels import ML_LABEL_MODEL_MAP, SKIP_LABELS
@@ -208,15 +208,41 @@ def _build_plan_generic(classified: List[ClassifiedPage]) -> Tuple[List[AzureJob
  
 
 
-def _analyze_with_azure(pdf_path: Path, *, model_id: str, pages: str) -> Any:
+def _derive_form_key_from_label_hint(label_hint: str) -> Optional[str]:
+    """Best-effort derive a template key from ML label(s).
+
+    Examples: "Form_1040_P1" → "Form_1040"; "Schedule_C_P2" → "Schedule_C".
+    If multiple labels, uses the first.
+    """
+    try:
+        first = (label_hint or "").split(",", 1)[0].strip()
+        if not first:
+            return None
+        # Remove common page suffixes like _P1, _P2, _PAGE_1, _PG_1 (case-insensitive)
+        import re as _re
+        base = _re.sub(r"(_P\d+|_PAGE_\d+|_PG_\d+)$", "", first, flags=_re.IGNORECASE)
+        return base or None
+    except Exception:
+        return None
+
+
+def _analyze_with_azure(pdf_path: Path, *, model_id: str, pages: str, label_hint: Optional[str] = None) -> Any:
     """Dispatch to Azure or local template service based on model_id.
 
     - If model_id starts with "local-template:", use the local form template service.
+      When the suffix is "auto" or empty, infer the template key from label_hint.
     - Otherwise, use Azure Document Intelligence.
     """
     mid = (model_id or "").strip()
     if mid.lower().startswith("local-template:"):
-        form_key = mid.split(":", 1)[1].strip() or "Form 1040 Individual"
+        suffix = mid.split(":", 1)[1].strip() if ":" in mid else ""
+        if not suffix or suffix.lower() == "auto":
+            key = _derive_form_key_from_label_hint(label_hint or "")
+            if not key:
+                raise RuntimeError("local-template:auto could not derive template key from labels")
+            form_key = key
+        else:
+            form_key = suffix
         return analyze_form_with_template(pdf_path, pages=pages, form_key=form_key)
     return parse_with_azure_docint(pdf_path, page_number=1, model_id=model_id, pages=pages)
 
@@ -326,7 +352,7 @@ def run() -> None:
             status.text(f"Analyzing {job.pages} — {label_text}")
             t0 = perf_counter()
             try:
-                result = _analyze_with_azure(pdf_path, model_id=job.model_id, pages=job.pages)
+                result = _analyze_with_azure(pdf_path, model_id=job.model_id, pages=job.pages, label_hint=label_text)
                 secs = perf_counter() - t0
                 api_total += secs
                 azure_results[job.job_id] = {"ok": True, "result": result}
@@ -376,7 +402,12 @@ def run() -> None:
             }
             if ok:
                 try:
-                    entry["result"] = azure_to_dict(payload.get("result"))
+                    # For Azure models, show only document fields; for local-template, keep full result
+                    res_obj = payload.get("result")
+                    if isinstance(job.model_id, str) and job.model_id.lower().startswith("local-template:"):
+                        entry["result"] = res_obj
+                    else:
+                        entry["result"] = azure_fields_to_dict(res_obj)
                 except Exception:
                     entry["result"] = None
             else:

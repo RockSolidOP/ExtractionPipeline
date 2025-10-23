@@ -1,16 +1,13 @@
 from __future__ import annotations
 
-"""Local template-based extraction service (integration stub).
+"""Local template-based extraction service.
 
-This service does NOT perform real OCR/extraction. It loads a reference
-template of expected fields (labels and types) from cjcode/form_fields.json
-and returns a JSON structure with those fields initialized to placeholder
-values. This lets the pipeline exercise planning/aggregation without calling
-Azure.
-
-Intended usage: map ML labels (e.g., Form_1040_P1/P2) to a special
-"local-template:<Form Key>" model id, and dispatch to this service in the
-pipeline when that model id is encountered.
+Runs coordinate-based extraction using JSON templates stored under
+`ExtractionPipeline/local-templates/`. Each template lists fields with
+`label`, `type`, `page` (1-based), and `rect` coordinates. The pipeline maps
+ML labels (e.g., Form_1040_P1/P2) to a special model id
+`local-template:<Form Key>`; when encountered, this service loads the matching
+template and extracts values via PyMuPDF (with OCR fallback).
 """
 
 from pathlib import Path
@@ -39,23 +36,9 @@ def _project_root() -> Path:
     return Path(__file__).resolve().parents[2]
 
 
-def _default_template_path() -> Path:
-    return _project_root() / "cjcode" / "form_fields.json"
-
-
 def _template_dir() -> Path:
     """Single directory for coordinate templates (no fallback)."""
     return _project_root() / "local-templates"
-
-
-def load_form_fields(template_path: Optional[Path] = None) -> Dict[str, List[Dict[str, Any]]]:
-    """Load cjcode/form_fields.json and return mapping of form key → fields list."""
-    path = template_path or _default_template_path()
-    with open(path, "r") as f:
-        data = json.load(f)
-        if not isinstance(data, dict):
-            raise ValueError("form_fields.json must be a JSON object mapping form names to field definitions")
-        return data
 
 
 def _normalize_name(s: str) -> str:
@@ -233,8 +216,8 @@ def analyze_form_with_template(
 
     - file_path: path to the PDF (opened only for coordinate templates)
     - pages: Azure-style pages spec (e.g., "1" or "1-2"); echoed in result
-    - form_key: key in form_fields.json (e.g., "Form 1040 Individual")
-    - template_path: optional override to the form_fields.json path
+    - form_key: display name used to select a coordinate template
+    - template_path: unused (retained for signature compatibility)
     """
     # Require a coordinate template in local-templates; otherwise signal failure
     coord_tmpl = find_coordinate_template(form_key)
