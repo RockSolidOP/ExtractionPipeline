@@ -194,7 +194,8 @@ def _build_plan_generic(classified: List[ClassifiedPage]) -> Tuple[List[AzureJob
             pair_no += 1
             gid = f"{file_name}#{tag(bl)}#{pair_no}({int(c.page)})"
             jid = gid
-            mdl = _select_model_for_page(c.label, bl)
+            # For singles, fetch model directly from config map (ignore SKIP_LABELS)
+            mdl = ML_LABEL_MODEL_MAP.get(c.label)
             if mdl is None:
                 plan.append(PagePlan(page=int(c.page), label=c.label, status="single", group_id=gid, job_id=None, action="skip", model_id=None))
             else:

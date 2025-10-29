@@ -20,6 +20,10 @@ ML_LABEL_MODEL_MAP: Dict[str, str] = {
     # (e.g., Form_1040_P1 → Form_1040).
     "Form_1040_P1": "local-template:auto",
     "Form_1040_P2": "local-template:auto",
+    "Schedule_C_P1": AZURE_CONFIG.get("model_id_1040_schedule_c", "prebuilt-tax.us.1040ScheduleC"),
+    "Schedule_C_P2": AZURE_CONFIG.get("model_id_1040_schedule_c", "prebuilt-tax.us.1040ScheduleC"),
+    "Schedule_F_P1": AZURE_CONFIG.get("model_id_1040_schedule_f", "prebuilt-tax.us.1040ScheduleF"),
+    "Schedule_F_P2": AZURE_CONFIG.get("model_id_1040_schedule_f", "prebuilt-tax.us.1040ScheduleF"),
 
     # Asset report (Schedule C) — route to Reducto schema with auto key
     "Federal_Asset_Report_Schedule_C_P1": "reducto:schema:auto",
@@ -47,8 +51,8 @@ SKIP_LABELS: Set[str] = {
     # 1040 Schedules (disabled)
     "Schedule_E_P1",
     "Schedule_E_P2",
-    "Schedule_C_P1",
-    "Schedule_C_P2",
+    # "Schedule_C_P1",
+    # "Schedule_C_P2",
     "Schedule_A",
     "Schedule_1",
 }
