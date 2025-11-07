@@ -1,4 +1,4 @@
-# Reducto + Azure Doc AI GUI
+# Extraction Pipeline Setup Guide
 
 A Streamlit app and test scripts that demonstrate Reducto parsing alongside Azure Document Intelligence. This README covers local setup, environment configuration, running the app, a quick smoke test, and a Docker option for a reproducible run.
 
@@ -55,14 +55,9 @@ python -c "from dotenv import load_dotenv; import os; load_dotenv(); print(bool(
 Recommended (modular entrypoint):
 
 ```
-streamlit run app/main.py
+streamlit run ExtractionPipeline/pages/Extraction_Pipeline.py 
 ```
 
-Legacy trampoline (also supported):
-
-```
-streamlit run app.py
-```
 
 - Open http://localhost:8501
 - Upload a PDF and try Reducto and Azure analysis
@@ -144,10 +139,12 @@ docker run --rm -it \
 Open http://localhost:8501 in your browser.
 
 
-## Proxy Options
+## Proxy Options (Not required as of now)
 
 - Test script proxy: `testing_files/reducto_files/test_reducto.py` includes an optional proxy host; set `USE_PROXY = True` and `PROXY_HOST = "host:port"`. It DNS-checks the host and falls back to direct if unresolved.
 - App-wide proxy: The Reducto client is created in `app/services/reducto_service.py`. It currently disables environment proxy variables (`trust_env=False`) and only uses a proxy if passed explicitly to `create_client()`. If you need global proxy via env vars, set `trust_env=True` and/or accept a `REDUCTO_PROXY_URL` environment variable and pass it into `httpx.Client(proxy=...)`.
+
+
 
 ## Troubleshooting
 
@@ -167,6 +164,9 @@ Open http://localhost:8501 in your browser.
 - `app/services/reducto_service.py` — Reducto client creation and helpers
 - `app/services/azure_service.py` — Azure Document Intelligence helpers
 - `app/post_processing.py` — plugin loader + fallback for post-processor
+- `app/post_processors/1040_main/pp_1040_main.py` — 1040 JSON/CSV mapper (outputs to same folder)
+- `app/post_processors/schdc/pp_1040SchdC.py` — Schedule C JSON mapper (outputs to same folder)
+- `app/post_processors/azure_pipeline_A7SDEPR3_Input-20251105-094523.json` — sample pipeline JSON
 - `testing_files/reducto_files/test_reducto.py` — CLI smoke test
 - `requirements.txt` — pinned dependencies
 - `Dockerfile`, `.dockerignore` — containerization
