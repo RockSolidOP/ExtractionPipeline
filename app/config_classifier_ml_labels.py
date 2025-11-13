@@ -14,6 +14,11 @@ from app.config import AZURE_CONFIG
 ML_LABEL_MODEL_MAP: Dict[str, str] = {
     "Form_1040_P1": AZURE_CONFIG.get("model_id_1040", "prebuilt-tax.us.1040"),
     "Form_1040_P2": AZURE_CONFIG.get("model_id_1040", "prebuilt-tax.us.1040"),
+    # Schedule C (enabled): route ML labels to Azure Schedule C model
+    "Schedule_C_P1": AZURE_CONFIG.get("model_id_1040_schedule_c", "prebuilt-tax.us.1040ScheduleC"),
+    "Schedule_C_P2": AZURE_CONFIG.get("model_id_1040_schedule_c", "prebuilt-tax.us.1040ScheduleC"),
+    # Fallback for when classifier yields base label only
+    "Schedule_C": AZURE_CONFIG.get("model_id_1040_schedule_c", "prebuilt-tax.us.1040ScheduleC"),
 }
 
 # Legacy/optional mappings (kept for reference; intentionally commented out)
@@ -35,6 +40,7 @@ POSTPROCESSOR_BY_LABEL: Dict[str, str] = {}
 
 POSTPROCESSOR_BY_BASE_LABEL: Dict[str, str] = {
     "Form_1040": "app.azure_post_processors.1040_1_2.pp_1040_main:postprocess_combined",
+    "Schedule_C": "app.azure_post_processors.schdc.pp_1040SchdC:postprocess_combined",
 }
 
 POSTPROCESSOR_BY_MODEL_PREFIX: Dict[str, str] = {}

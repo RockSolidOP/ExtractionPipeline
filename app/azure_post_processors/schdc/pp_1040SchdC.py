@@ -21,7 +21,6 @@ def output_name_for(pipeline_path: Path) -> Path:
 
 
 FIELD_ORDER = [
-    "*SchCUnit",
     "TSJ",
     "BusinessName",
     "BusinessCode",
@@ -57,11 +56,10 @@ def selected_line(lines: list[str], i: int) -> bool:
     return i < len(lines) and isinstance(lines[i], str) and "selected" in lines[i]
 
 
-def remap_run_to_row(result: dict, unit_index: int) -> dict:
+def remap_run_to_row(result: dict) -> dict:
     row = {k: "" for k in FIELD_ORDER}
 
     # --- basic ids ---
-    row["*SchCUnit"] = unit_index
     row["TSJ"] = ""  # Not present in Azure Schedule C output; left blank
 
     # --- business header from Azure ---
@@ -126,9 +124,9 @@ def process_pipeline_file(pipeline_path: Path) -> Path | None:
         return None
 
     rows = []
-    for idx, run in enumerate(sched_c_runs, start=1):
+    for run in sched_c_runs:
         result = run.get("result") or {}
-        rows.append(remap_run_to_row(result, idx))
+        rows.append(remap_run_to_row(result))
 
     out_path = output_name_for(pipeline_path)
     with open(out_path, "w", encoding="utf-8") as f:
@@ -159,3 +157,63 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+# ---------------------------------------------------------------------------
+# Adapter for pipeline integration (Schedule C)
+# ---------------------------------------------------------------------------
+def postprocess_combined(combined: dict, output_dir=None, options: dict | None = None) -> dict:
+    """Adapter entrypoint to integrate with the Streamlit pipeline page.
+
+    - Expects `combined` to contain `page_plan` and `runs`.
+    - Identifies the first successful Schedule C run.
+    - Remaps it to a single Schedule C row (unit 1), writes JSON next to this module
+      unless `output_dir` is provided, and returns an artifact summary along with
+      the remapped JSON payload for embedding in the combined results.
+    """
+    # Collect Schedule C job_ids from page_plan where action == analyze
+    job_ids = set()
+    for item in combined.get("page_plan", []):
+        label = str(item.get("label") or "")
+        if label.startswith("Schedule_C") and item.get("job_id") and item.get("action") == "analyze":
+            job_ids.add(item["job_id"])
+
+    # Find the first successful run matching those job_ids (or any Schedule C run)
+    chosen_run = None
+    for r in combined.get("runs", []):
+        if not r.get("ok"):
+            continue
+        mid = str(r.get("model_id") or "")
+        is_schc = mid.endswith("ScheduleC") or mid.lower().endswith("schedulec")
+        if not is_schc:
+            continue
+        if job_ids and r.get("job_id") not in job_ids:
+            continue
+        chosen_run = r
+        break
+
+    if not chosen_run:
+        raise RuntimeError("postprocess_combined (Schedule C): No successful Schedule C run found")
+
+    result = chosen_run.get("result") or {}
+
+    # Build the single row for this run
+    row = remap_run_to_row(result)
+
+    # Choose output path
+    out_dir = Path(output_dir) if output_dir else HERE
+    out_dir.mkdir(parents=True, exist_ok=True)
+    json_path = out_dir / "schedule_c_mapped_output.json"
+
+    with open(json_path, "w", encoding="utf-8") as f:
+        json.dump([row], f, ensure_ascii=False, indent=2)
+
+    return {
+        "artifacts": {
+            "json": str(json_path),
+        },
+        "job_id": chosen_run.get("job_id"),
+        "pages": chosen_run.get("pages"),
+        # Provide the remapped row so the pipeline can embed it per job
+        "json_data": row,
+    }

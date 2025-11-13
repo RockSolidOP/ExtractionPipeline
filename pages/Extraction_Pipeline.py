@@ -96,8 +96,19 @@ class PagePlan:
 ## (removed) canonical mapping — we use raw ML labels end-to-end now.
 
 def _select_model_for_page(label: str, base_label: Optional[str]) -> Optional[str]:
-    """Return model id strictly from ML_LABEL_MODEL_MAP; else skip (None)."""
-    return ML_LABEL_MODEL_MAP.get(label)
+    """Return model id from ML_LABEL_MODEL_MAP with base-label fallback.
+
+    Tries exact label first, then base_label, then common P1/P2 forms.
+    """
+    mdl = ML_LABEL_MODEL_MAP.get(label)
+    if mdl is not None:
+        return mdl
+    if base_label:
+        # try base form and common variants
+        for k in (base_label, f"{base_label}_P1", f"{base_label}_P2"):
+            if k in ML_LABEL_MODEL_MAP:
+                return ML_LABEL_MODEL_MAP[k]
+    return None
 
 
 def _build_plan_generic(classified: List[ClassifiedPage]) -> Tuple[List[AzureJob], List[PagePlan]]:
@@ -194,8 +205,8 @@ def _build_plan_generic(classified: List[ClassifiedPage]) -> Tuple[List[AzureJob
             pair_no += 1
             gid = f"{file_name}#{tag(bl)}#{pair_no}({int(c.page)})"
             jid = gid
-            # For singles, fetch model directly from config map
-            mdl = ML_LABEL_MODEL_MAP.get(c.label)
+            # For singles, use the same selection with base-label fallback
+            mdl = _select_model_for_page(c.label, bl)
             if mdl is None:
                 plan.append(PagePlan(page=int(c.page), label=c.label, status="single", group_id=gid, job_id=None, action="skip", model_id=None))
             else:
@@ -382,6 +393,16 @@ def run() -> None:
             "page_plan": [vars(p) for p in page_plan],
         })
 
+    # If a previous combined result exists in session, show it for convenience
+    if "combined_out" in st.session_state:
+        st.markdown("#### Latest Combined Result (previous run)")
+        st.json(st.session_state.get("combined_out"))
+        download_json_button(
+            "Download last result",
+            data=st.session_state.get("combined_out"),
+            filename=f"azure_pipeline_{Path(pdf_path).stem}.json",
+        )
+
     # Run button
     if st.button("Run Extraction", type="primary"):
         # Progress across analyzable pages only
@@ -502,7 +523,7 @@ def run() -> None:
                 })
 
         # If post-processors returned mapped JSON payloads, embed them into combined
-        # replacing the Azure fields for those jobs.
+        # replacing the Azure fields for those jobs (do not retain raw Azure fields).
         mapped_by_job = {}
         for item in post_summaries:
             summ = item.get("summary") or {}
@@ -514,19 +535,23 @@ def run() -> None:
             for r in combined.get("runs", []):
                 jid = r.get("job_id")
                 if jid in mapped_by_job:
-                    # Preserve the original Azure-converted fields for traceability
-                    if "result" in r:
-                        r["azure_fields_raw"] = r["result"]
+                    # Replace Azure fields with post-processed mapping; do not keep raw fields
                     r["result"] = mapped_by_job[jid]
 
-        if post_summaries:
-            combined["postprocess"] = post_summaries
+        # Do not include post-process summaries inside combined output
+
+        # Build a lean combined output for display/download (exclude planning details)
+        combined_out = dict(combined)
+        combined_out.pop("page_plan", None)
+
+        # Persist result in session so it remains after reruns (e.g., after downloads)
+        st.session_state["combined_out"] = combined_out
 
         st.markdown("#### Combined Result (JSON)")
-        st.json(combined)
+        st.json(combined_out)
         download_json_button(
             "Download azure_pipeline.json",
-            data=combined,
+            data=combined_out,
             filename=f"azure_pipeline_{Path(pdf_path).stem}.json",
         )
 
