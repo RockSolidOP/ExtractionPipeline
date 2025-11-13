@@ -11,7 +11,7 @@ What this page does
 
 Notes
 - No regex classifier here; ML labels are used end-to-end.
-- Model mapping and skip list live in app/config_classifier_ml_labels.py.
+- Model mapping and post-processor selection live in app/config_classifier_ml_labels.py.
 """
 
 import json
@@ -30,7 +30,8 @@ try:  # noqa: SIM105 - deliberate try/except import shim
     from app.services.reducto_schema_registry import get_schema_config_for_key
     from app.services.ml_classify_service import classify_document_ml
     from app.services.local_template_service import analyze_form_with_template
-    from app.config_classifier_ml_labels import ML_LABEL_MODEL_MAP, SKIP_LABELS
+    from app.config_classifier_ml_labels import ML_LABEL_MODEL_MAP
+    from app.post_processing import select_postprocessor, run_postprocessor
 except ModuleNotFoundError:  # Running via `streamlit run pages/Extraction_Pipeline.py`
     import sys as _sys
     from pathlib import Path as _Path
@@ -43,7 +44,8 @@ except ModuleNotFoundError:  # Running via `streamlit run pages/Extraction_Pipel
     from app.services.reducto_schema_registry import get_schema_config_for_key
     from app.services.ml_classify_service import classify_document_ml
     from app.services.local_template_service import analyze_form_with_template
-    from app.config_classifier_ml_labels import ML_LABEL_MODEL_MAP, SKIP_LABELS
+    from app.config_classifier_ml_labels import ML_LABEL_MODEL_MAP
+    from app.post_processing import select_postprocessor, run_postprocessor
 from app.ui.components import download_json_button, file_uploader
 from app.utils.storage import save_uploaded_file
 
@@ -94,9 +96,7 @@ class PagePlan:
 ## (removed) canonical mapping — we use raw ML labels end-to-end now.
 
 def _select_model_for_page(label: str, base_label: Optional[str]) -> Optional[str]:
-    """Return model id for a page strictly based on ML label map; else skip."""
-    if label in SKIP_LABELS:
-        return None
+    """Return model id strictly from ML_LABEL_MODEL_MAP; else skip (None)."""
     return ML_LABEL_MODEL_MAP.get(label)
 
 
@@ -194,7 +194,7 @@ def _build_plan_generic(classified: List[ClassifiedPage]) -> Tuple[List[AzureJob
             pair_no += 1
             gid = f"{file_name}#{tag(bl)}#{pair_no}({int(c.page)})"
             jid = gid
-            # For singles, fetch model directly from config map (ignore SKIP_LABELS)
+            # For singles, fetch model directly from config map
             mdl = ML_LABEL_MODEL_MAP.get(c.label)
             if mdl is None:
                 plan.append(PagePlan(page=int(c.page), label=c.label, status="single", group_id=gid, job_id=None, action="skip", model_id=None))
@@ -310,6 +310,10 @@ def run() -> None:
         st.stop()
     pdf_path = save_uploaded_file(uploaded)
     st.caption(f"Saved: {pdf_path}")
+
+    # Post-processor options
+    st.markdown("#### Post-Processor Options")
+    use_jsonic_dependents = st.checkbox("Dependents as JSONic objects (else array)", value=False)
 
     # Optional: open for validation if needed (currently not used)
 
@@ -459,6 +463,64 @@ def run() -> None:
             else:
                 entry["error"] = payload.get("error")
             combined["runs"].append(entry)
+
+        # Post-processing phase (optional per config)
+        post_summaries = []
+        # Run at most one post-processor per Azure job (based on label/base_label/model id)
+        jobs_by_id = {job.job_id: job for job in azure_jobs}
+        for job in azure_jobs:
+            # Derive a representative label for the job
+            labels_for_job = [p.label for p in page_plan if p.job_id == job.job_id]
+            label0 = labels_for_job[0] if labels_for_job else None
+
+            # Best-effort derive base_label from label text
+            try:
+                base_hint = _derive_form_key_from_label_hint(label0 or "")
+            except Exception:
+                base_hint = None
+
+            spec = select_postprocessor(label0, base_hint, job.model_id)
+            if not spec:
+                continue
+            try:
+                summary = run_postprocessor(
+                    spec,
+                    combined,
+                    output_dir=None,
+                    dependents_format=("jsonic" if use_jsonic_dependents else "array"),
+                )
+                post_summaries.append({
+                    "job_id": job.job_id,
+                    "spec": spec,
+                    "summary": summary,
+                })
+            except Exception as e:
+                post_summaries.append({
+                    "job_id": job.job_id,
+                    "spec": spec,
+                    "error": f"{type(e).__name__}: {e}",
+                })
+
+        # If post-processors returned mapped JSON payloads, embed them into combined
+        # replacing the Azure fields for those jobs.
+        mapped_by_job = {}
+        for item in post_summaries:
+            summ = item.get("summary") or {}
+            jid = item.get("job_id") or summ.get("job_id")
+            if jid and isinstance(summ, dict) and "json_data" in summ:
+                mapped_by_job[jid] = summ["json_data"]
+
+        if mapped_by_job:
+            for r in combined.get("runs", []):
+                jid = r.get("job_id")
+                if jid in mapped_by_job:
+                    # Preserve the original Azure-converted fields for traceability
+                    if "result" in r:
+                        r["azure_fields_raw"] = r["result"]
+                    r["result"] = mapped_by_job[jid]
+
+        if post_summaries:
+            combined["postprocess"] = post_summaries
 
         st.markdown("#### Combined Result (JSON)")
         st.json(combined)

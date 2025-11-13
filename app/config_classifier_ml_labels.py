@@ -1,58 +1,40 @@
 from __future__ import annotations
 
-"""Mapping from ML classifier output labels (exact strings) to Azure model IDs.
+"""Minimal ML label → model and post‑processor routing.
 
-Edit this file to control Azure routing when the Extraction Pipeline uses the
-ML (FAISS/CLIP) classifier. Keys are exact labels as produced by the ML
-classifier (no normalization). Values are Azure model IDs.
-
-Examples are seeded from `id_map_v1.3.jsonl` under the classifier module.
-Extend this list with labels you encounter in your data.
+Only Form_1040_P1 and Form_1040_P2 are routed; all other labels are skipped
+implicitly by not appearing in ML_LABEL_MODEL_MAP.
 """
 
-from typing import Dict, Set
+from typing import Dict
 from app.config import AZURE_CONFIG
 
 
+# Exact ML labels → Azure model IDs
 ML_LABEL_MODEL_MAP: Dict[str, str] = {
-    # 1040 main — route to local template service using automatic template inference
-    # "local-template:auto" tells the pipeline to derive the template key from the ML label
-    # (e.g., Form_1040_P1 → Form_1040).
-    "Form_1040_P1": "local-template:auto",
-    "Form_1040_P2": "local-template:auto",
-    "Schedule_C_P1": AZURE_CONFIG.get("model_id_1040_schedule_c", "prebuilt-tax.us.1040ScheduleC"),
-    "Schedule_C_P2": AZURE_CONFIG.get("model_id_1040_schedule_c", "prebuilt-tax.us.1040ScheduleC"),
-    "Schedule_F_P1": AZURE_CONFIG.get("model_id_1040_schedule_f", "prebuilt-tax.us.1040ScheduleF"),
-    "Schedule_F_P2": AZURE_CONFIG.get("model_id_1040_schedule_f", "prebuilt-tax.us.1040ScheduleF"),
-
-    # Asset report (Schedule C) — route to Reducto schema with auto key
-    "Federal_Asset_Report_Schedule_C_P1": "reducto:schema:auto",
-
-    # 1040 Schedules are temporarily disabled and added to SKIP_LABELS below.
-    # Keeping these here as comment for reference if you want to re-enable later:
-    # "Schedule_E_P1": AZURE_CONFIG.get("model_id_1040_schedule_e", "prebuilt-tax.us.1040ScheduleE"),
-    # "Schedule_E_P2": AZURE_CONFIG.get("model_id_1040_schedule_e", "prebuilt-tax.us.1040ScheduleE"),
-    # "Schedule_C_P1": AZURE_CONFIG.get("model_id_1040_schedule_c", "prebuilt-tax.us.1040ScheduleC"),
-    # "Schedule_C_P2": AZURE_CONFIG.get("model_id_1040_schedule_c", "prebuilt-tax.us.1040ScheduleC"),
-    # "Schedule_A": AZURE_CONFIG.get("model_id_1040_schedule_a", "prebuilt-tax.us.1040ScheduleA"),
-    # "Schedule_1": AZURE_CONFIG.get("model_id_1040_schedule1", "prebuilt-tax.us.1040Schedule1"),
-
-    # Note: asset/adjustment reports are intentionally not routed here; see SKIP_LABELS below.
+    "Form_1040_P1": AZURE_CONFIG.get("model_id_1040", "prebuilt-tax.us.1040"),
+    "Form_1040_P2": AZURE_CONFIG.get("model_id_1040", "prebuilt-tax.us.1040"),
 }
 
-# Labels that should be skipped (no Azure model selection/job creation)
-SKIP_LABELS: Set[str] = {
-    # "Federal_Asset_Report_Schedule_C_P1",  # now routed to Reducto schema extraction
-    "Federal_Asset_Report_Schedule_F_P1",
-    "AMT_Asset_Report_Schedule_C_P1",
-    "AMT_Asset_Report_Schedule_F_P1",
-    "Bonus_Depreciation_Report_Schedule_C_P1",
-    "Depreciation_Adjustment_Report_P1",
-    # 1040 Schedules (disabled)
-    "Schedule_E_P1",
-    "Schedule_E_P2",
-    # "Schedule_C_P1",
-    # "Schedule_C_P2",
-    "Schedule_A",
-    "Schedule_1",
+# Legacy/optional mappings (kept for reference; intentionally commented out)
+# To re-enable any, move the entry above into ML_LABEL_MODEL_MAP.
+#
+# "Schedule_C_P1": AZURE_CONFIG.get("model_id_1040_schedule_c", "prebuilt-tax.us.1040ScheduleC"),
+# "Schedule_C_P2": AZURE_CONFIG.get("model_id_1040_schedule_c", "prebuilt-tax.us.1040ScheduleC"),
+# "Schedule_F_P1": AZURE_CONFIG.get("model_id_1040_schedule_f", "prebuilt-tax.us.1040ScheduleF"),
+# "Schedule_F_P2": AZURE_CONFIG.get("model_id_1040_schedule_f", "prebuilt-tax.us.1040ScheduleF"),
+#
+# # Asset report (Schedule C) — route to Reducto schema with auto key
+# "Federal_Asset_Report_Schedule_C_P1": "reducto:schema:auto",
+
+# No explicit skip list: unmapped labels are skipped implicitly by the planner.
+
+# Post‑processor selection
+# Precedence: LABEL → BASE_LABEL → MODEL_PREFIX
+POSTPROCESSOR_BY_LABEL: Dict[str, str] = {}
+
+POSTPROCESSOR_BY_BASE_LABEL: Dict[str, str] = {
+    "Form_1040": "app.azure_post_processors.1040_1_2.pp_1040_main:postprocess_combined",
 }
+
+POSTPROCESSOR_BY_MODEL_PREFIX: Dict[str, str] = {}
