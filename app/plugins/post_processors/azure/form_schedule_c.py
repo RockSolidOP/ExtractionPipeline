@@ -134,42 +134,13 @@ def process_pipeline_file(pipeline_path: Path) -> Path | None:
     return out_path
 
 
-def main():
-    # Discover all azure pipeline JSON files in BASE_DIR
-    inputs = sorted(BASE_DIR.glob(PIPELINE_GLOB))
-    # Exclude previously written outputs like azure_pipeline_*__schedule_c.json
-    inputs = [p for p in inputs if not p.name.endswith("__schedule_c.json")]
-    if not inputs:
-        raise SystemExit(f"No pipeline JSONs matched {BASE_DIR / PIPELINE_GLOB}")
-
-    written = []
-    for p in inputs:
-        out = process_pipeline_file(p)
-        if out is not None:
-            print(f"written -> {out}")
-            written.append(out)
-        else:
-            print(f"skip (no Schedule C) -> {p}")
-
-    if not written:
-        print("No Schedule C outputs produced.")
-
-
-if __name__ == "__main__":
-    main()
-
-
-# ---------------------------------------------------------------------------
-# Adapter for pipeline integration (Schedule C)
-# ---------------------------------------------------------------------------
 def postprocess_combined(combined: dict, output_dir=None, options: dict | None = None) -> dict:
     """Adapter entrypoint to integrate with the Streamlit pipeline page.
 
     - Expects `combined` to contain `page_plan` and `runs`.
     - Identifies the first successful Schedule C run.
-    - Remaps it to a single Schedule C row (unit 1), writes JSON next to this module
-      unless `output_dir` is provided, and returns an artifact summary along with
-      the remapped JSON payload for embedding in the combined results.
+    - Remaps it to a single Schedule C row (unit 1) and returns an artifact summary
+      and the remapped JSON payload for embedding in the combined results.
     """
     # Collect Schedule C job_ids from page_plan where action == analyze
     job_ids = set()
@@ -196,24 +167,13 @@ def postprocess_combined(combined: dict, output_dir=None, options: dict | None =
         raise RuntimeError("postprocess_combined (Schedule C): No successful Schedule C run found")
 
     result = chosen_run.get("result") or {}
-
-    # Build the single row for this run
     row = remap_run_to_row(result)
 
-    # Choose output path
-    out_dir = Path(output_dir) if output_dir else HERE
-    out_dir.mkdir(parents=True, exist_ok=True)
-    json_path = out_dir / "schedule_c_mapped_output.json"
-
-    with open(json_path, "w", encoding="utf-8") as f:
-        json.dump([row], f, ensure_ascii=False, indent=2)
-
+    # Do not write artifacts to disk in pipeline adapter; return only in-memory JSON
     return {
-        "artifacts": {
-            "json": str(json_path),
-        },
+        "artifacts": {},
         "job_id": chosen_run.get("job_id"),
         "pages": chosen_run.get("pages"),
-        # Provide the remapped row so the pipeline can embed it per job
         "json_data": row,
     }
+

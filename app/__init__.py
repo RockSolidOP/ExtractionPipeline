@@ -1,10 +1,10 @@
 """Internal package for the Streamlit app.
 
 Modules are organized into:
-- config: constants and options
-- services: API clients and parsing helpers
-- utils: lightweight helpers (e.g., PDF preview)
-- ui: Streamlit UI components and panels
-- post_processing: dynamic import + reload of custom post-processor
+- core: typed settings via Pydantic Settings
+- domain: dataclasses and domain models
+- application: planning and pipeline orchestration
+- infrastructure: adapters (Azure, Reducto, templates, ML, storage)
+- plugins: post-processors and registry
+- ui: Streamlit UI components
 """
-

@@ -1,6 +1,6 @@
 # Extraction Pipeline — High‑Level Technical Overview
 
-This project provides a Streamlit UI that classifies pages of a PDF and routes them to the appropriate extraction engine, then aggregates results into a single JSON artifact.
+This project provides a Streamlit UI that classifies pages of a PDF and routes them to the appropriate extraction engine, then aggregates results into a single JSON artifact. The UI is thin; orchestration lives in the application layer.
 
 - Inputs: one uploaded PDF per run.
 - Core steps: ML page classification → page pairing and routing → extraction (Azure/Reducto/local template) → combined JSON.
@@ -9,18 +9,21 @@ This project provides a Streamlit UI that classifies pages of a PDF and routes t
 ## Architecture
 
 - UI (Streamlit)
-  - Single page at `pages/Extraction_Pipeline.py` renders upload, shows a plan, runs jobs, and downloads final JSON.
-- Services
-  - ML classification: OpenCLIP + FAISS k‑NN over a curated index to assign labels per page.
-  - Azure Document Intelligence: prebuilt tax models (e.g., 1040, Schedule C) for document field extraction.
-  - Reducto (schema‑based): structured extraction against JSON Schemas stored under `reducto_schema/`.
-  - Local coordinate templates: PyMuPDF + optional OCR to read specific fields defined by JSON templates.
+  - `pages/Extraction_Pipeline.py` uploads a PDF and calls `app/application/pipeline.py:run_pipeline`.
+- Application (use cases)
+  - Planning: `app/application/planning.py:build_page_plan` (pair P1/P2, choose models).
+  - Pipeline: `app/application/pipeline.py:run_pipeline` (classify → plan → execute → aggregate → post-process).
+- Infrastructure (adapters)
+  - ML classification: `app/infrastructure/ml_classify_service.py` (OpenCLIP + FAISS).
+  - Azure Document Intelligence: `app/infrastructure/azure_service.py`.
+  - Reducto schema: `app/infrastructure/reducto_service.py` and `reducto_schema_registry.py`.
+  - Local coordinate templates: `app/infrastructure/local_template_service.py`.
+- Plugins (post-processing)
+  - `app/plugins/post_processors/azure/form_1040.py`, `form_schedule_c.py` via `app/plugins/registry.py`.
 - Configuration
-  - Label→model routing and skip list in `app/config_classifier_ml_labels.py`.
-  - Extraction knobs for Reducto and Azure in `app/config.py`.
-  - Cloud keys via `.env`: `REDUCTO_API_KEY`, `AZURE_DOC_AI_ENDPOINT`, `AZURE_DOC_AI_KEY`.
+  - `app/core/settings.py` (Pydantic Settings). Cloud keys via `.env`.
 - Storage
-  - Uploaded files are persisted under the repository‑level `uploads/` folder.
+  - Uploads under `uploads/` via `app/infrastructure/storage/uploads.py`.
 
 ## Data Flow
 
@@ -50,32 +53,26 @@ This project provides a Streamlit UI that classifies pages of a PDF and routes t
 
 ## Key Responsibilities
 
-- `pages/Extraction_Pipeline.py` — orchestrates the pipeline: classification → planning → execution → aggregation.
-- `app/services/ml_classify_service.py` — wraps the embedded classifier module for per‑page labeling.
-- `app/services/azure_service.py` — Azure client creation and result normalization.
-- `app/services/reducto_service.py` — Reducto client configuration, timeouts, and helpers.
-- `app/services/reducto_schema_registry.py` — loads JSON Schemas and default prompts.
-- `app/services/local_template_service.py` — coordinate template extraction with PyMuPDF and OCR fallback.
+- `pages/Extraction_Pipeline.py` — UI; calls `run_pipeline` and renders outputs.
+- `app/application/pipeline.py` — pipeline orchestration.
+- `app/application/planning.py` — plan construction.
+- `app/infrastructure/*` — adapters for ML, Azure, Reducto, local templates, storage.
+- `app/plugins/*` — post-processors and registry.
 
 ## Configuration Surfaces
 
-- Cloud credentials
-  - `REDUCTO_API_KEY`, `AZURE_DOC_AI_ENDPOINT`, `AZURE_DOC_AI_KEY` via `.env`.
-- Routing
-  - Edit `app/config_classifier_ml_labels.py` to add or change label→model mappings, or to skip certain labels.
-- Reducto behavior
-  - `app/config.py` exposes OPTIONS, ADVANCED_OPTIONS, EXPERIMENTAL_OPTIONS for OCR/chunking and page‑range control.
-- Azure behavior
-  - Default model IDs under `AZURE_CONFIG` in `app/config.py`.
+- Cloud credentials: `REDUCTO_API_KEY`, `AZURE_DOC_AI_ENDPOINT`, `AZURE_DOC_AI_KEY` via `.env`.
+- Routing: `app/config_classifier_ml_labels.py` (label → model).
+- Reducto behavior: options surfaced via `app/core/settings.py`.
+- Azure behavior: prebuilt model ids via `app/core/settings.py`.
 
 ## Outputs and Persistence
 
 - Combined result JSON is rendered in the UI and downloadable (file name `azure_pipeline_<pdf-stem>.json`).
-- Uploads are stored under `uploads/`. A periodic cleanup policy is available in `app/utils/storage.py` and can be used by future background jobs.
+- Uploads are stored under `uploads/`. Cleanup helpers live in `app/infrastructure/storage/uploads.py`.
 
 ## Limitations and Notes
 
 - The ML classifier relies on a prebuilt FAISS index; it does not train on the fly.
 - The local coordinate template mode requires PyMuPDF and, for OCR fallback, Tesseract installed on the host.
 - Some 1040 schedules may be intentionally skipped via `SKIP_LABELS` until routing and post‑processing are finalized.
-

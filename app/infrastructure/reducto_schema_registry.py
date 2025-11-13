@@ -1,13 +1,5 @@
 from __future__ import annotations
 
-"""Dynamic registry for Reducto schema-based extraction.
-
-Loads JSON Schemas from `ExtractionPipeline/reducto_schema/` based on a logical
-key (usually derived from the ML label base, e.g., Federal_Asset_Report_Schedule_C).
-The selected schema file is the most recently modified file whose name contains
-the key and ends with `_schema.json` (case-insensitive).
-"""
-
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 import json
@@ -27,10 +19,6 @@ def _normalize(s: str) -> str:
 
 
 def get_asset_form_extraction_prompt() -> str:
-    """
-    System prompt for extracting data from Asset Depreciation Form (AssetForm)
-    into JSON with strict schema adherence.
-    """
     return (
         "You are extracting data from an Asset Depreciation Form into JSON. "
         "Return only a single JSON object that exactly conforms to the provided JSON Schema—no extra keys, comments, or text.\n"
@@ -60,7 +48,6 @@ def _default_prompt_for_key(key: str) -> str:
     k = _normalize(key)
     if "asset" in k and "schedule_c" in k:
         return get_asset_form_extraction_prompt()
-    # Generic fallback prompt
     return (
         "Extract fields into a JSON object that strictly conforms to the provided JSON Schema. "
         "Return exactly one JSON object with no extra commentary."
@@ -68,7 +55,6 @@ def _default_prompt_for_key(key: str) -> str:
 
 
 def find_schema_file_for_key(key: str) -> Optional[Path]:
-    """Find the most recent *_schema.json containing the key in its name."""
     target = _normalize(key)
     d = _schema_dir()
     if not d.exists():
@@ -87,11 +73,6 @@ def find_schema_file_for_key(key: str) -> Optional[Path]:
 
 
 def get_schema_config_for_key(key: str) -> Dict[str, Any]:
-    """Return a dict with {schema, system_prompt} loaded from disk, inferred by key.
-
-    Raises FileNotFoundError if no matching schema file is found.
-    Raises ValueError if the schema file is invalid JSON.
-    """
     p = find_schema_file_for_key(key)
     if not p:
         raise FileNotFoundError(f"No schema file found for key '{key}' in {_schema_dir()}")

@@ -4,33 +4,27 @@ This document maps the codebase into concrete responsibilities, data models, and
 
 ## UI Orchestration
 
-- Entry point: `ExtractionPipeline/pages/Extraction_Pipeline.py:301`
-  - `run()` sets up the page, handles upload, executes the pipeline, and renders outputs.
-  - Dataclasses used:
-    - `ClassifiedPage` — `ExtractionPipeline/pages/Extraction_Pipeline.py:57`
-    - `AzureJob` — `ExtractionPipeline/pages/Extraction_Pipeline.py:71`
-    - `PagePlan` — `ExtractionPipeline/pages/Extraction_Pipeline.py:81`
+- Entry point: `pages/Extraction_Pipeline.py`
+  - `run()` sets up the page, handles upload, calls `app/application/pipeline.py:run_pipeline`, and renders outputs.
+  - Domain models live in `app/domain/models.py` (ClassifiedPage, AzureJob, PagePlan).
 
-- Planning: `_build_plan_generic(classified)` — `ExtractionPipeline/pages/Extraction_Pipeline.py:103`
-  - Groups pages by base_label, infers P1/P2, pairs when possible, and creates Azure jobs for analyzable items.
-  - Produces two structures:
-    - `jobs: List[AzureJob]` — execution units (model_id + pages span).
-    - `plan: List[PagePlan]` — per‑page decisions (analyze vs skip, model used, grouping IDs).
+- Planning: `app/application/planning.py:build_page_plan(classified)`
+  - Groups pages by base_label, infers P1/P2, pairs when possible, and creates jobs.
 
-- Analysis dispatcher: `_analyze_with_azure(...)` — `ExtractionPipeline/pages/Extraction_Pipeline.py:246`
+- Analysis dispatcher: `app/application/pipeline.py:_analyze_dispatch(...)`
   - Routes by `model_id` prefix:
-    - `local-template:<Form Key|auto>` → `app/services/local_template_service.analyze_form_with_template`
-    - `reducto:schema:<key|auto>` → `app/services/reducto_schema_registry.get_schema_config_for_key` + `reducto_service.extract_with_schema`
-    - default → Azure Document Intelligence via `app/services/azure_service.parse_with_azure_docint`
+    - `local-template:<Form Key|auto>` → `app/infrastructure/local_template_service.analyze_form_with_template`
+    - `reducto:schema:<key|auto>` → `app/infrastructure/reducto_schema_registry.get_schema_config_for_key` + `app/infrastructure/reducto_service.extract_with_schema`
+    - default → Azure Document Intelligence via `app/infrastructure/azure_service.parse_with_azure_docint`
 
 - Aggregation
-  - Azure outputs are normalized to a field‑centric dict via `azure_fields_to_dict`.
-  - Local template and Reducto schema outputs are included verbatim under each run.
-  - Combined JSON includes: `document`, `page_plan`, and `runs` (per job `ok/error` and `result`).
+  - Azure outputs normalized via `app/infrastructure/azure_service.azure_fields_to_dict`.
+  - Local template and Reducto schema outputs included verbatim when applicable.
+  - Combined JSON includes `document`, `page_plan`, and `runs`.
 
 ## ML Classification (FAISS + OpenCLIP)
 
-- Service wrapper: `ExtractionPipeline/app/services/ml_classify_service.py:54`
+- Adapter wrapper: `app/infrastructure/ml_classify_service.py`
   - `classify_document_ml(pdf_path, topk=1, root=None)`
     - Uses PyMuPDF to count pages.
     - For each page, calls the embedded classifier module (`classifier_module`) to get the top label or top‑k suggestions.
@@ -49,30 +43,31 @@ This document maps the codebase into concrete responsibilities, data models, and
 
 ## Azure Document Intelligence
 
-- Client and helpers: `ExtractionPipeline/app/services/azure_service.py`
+- Client and helpers: `app/infrastructure/azure_service.py`
   - `create_azure_client()` — `:20` reads `AZURE_DOC_AI_ENDPOINT` and `AZURE_DOC_AI_KEY` from env/.env.
   - `parse_with_azure(file_path, page_number=None, model_id=None, pages=None)` — `:45`
   - `parse_with_azure_docint(...)` — `:83` (new SDK mirror) used by the UI.
   - `azure_to_dict(result)` — `:139` best‑effort conversion to JSON‑serializable dict.
   - `azure_fields_to_dict(result)` — `:162` extracts `documents[].fields` as a compact dict/list.
 
-- Config: `ExtractionPipeline/app/config.py`
-  - `AZURE_CONFIG` defines default model IDs (e.g., 1040 main, Schedule C).
+## Configuration
+
+- Centralized in `app/core/settings.py` (Pydantic Settings) for Azure, Reducto, Uploads, PyMuPDF.
 
 ## Reducto (Schema‑Based Extraction)
 
-- Client and helpers: `ExtractionPipeline/app/services/reducto_service.py`
+- Client and helpers: `app/infrastructure/reducto_service.py`
   - `create_client(...)` — `:15` creates a `reducto.Reducto` client with explicit `httpx` timeouts and proxy controls via env overrides.
   - `parse_document*` — page and range helpers around `client.parse.run`.
   - `extract_with_schema(...)` — `:120` uploads once and executes `client.extract.run` with schema + system prompt.
 
-- Schema registry: `ExtractionPipeline/app/services/reducto_schema_registry.py`
+- Schema registry: `app/infrastructure/reducto_schema_registry.py`
   - `get_schema_config_for_key(key)` — `:89` finds the most recent `*_schema.json` containing the key under `reducto_schema/`, returns `{schema, system_prompt, schema_path, key}`.
   - Default prompts tailored for specific keys (e.g., asset schedules) with strict schema adherence.
 
 ## Local Coordinate Templates (PyMuPDF + OCR)
 
-- Service: `ExtractionPipeline/app/services/local_template_service.py`
+- Adapter: `app/infrastructure/local_template_service.py`
   - `find_coordinate_template(form_key)` — `:48` finds most recent matching `*_template.json` under `local-templates/`.
   - `analyze_form_with_template(file_path, pages, form_key, template_path=None)` — `:208` loads the coordinate template and extracts values.
   - Text extraction via PyMuPDF `get_text(clip=...)`; OCR fallback via Tesseract when available; checkbox heuristic via central pixel density.
@@ -90,7 +85,7 @@ This document maps the codebase into concrete responsibilities, data models, and
 
 ## Utilities and UI helpers
 
-- Uploads and cleanup: `ExtractionPipeline/app/utils/storage.py`
+- Uploads and cleanup: `app/infrastructure/storage/uploads.py`
   - `save_uploaded_file(...)` — `:26` persists Streamlit’s `UploadedFile` into `uploads/` with a timestamped name.
   - `cleanup_uploads(...)` — `:70` supports age/size/count caps.
 
@@ -108,9 +103,9 @@ This document maps the codebase into concrete responsibilities, data models, and
 ## File/Folder Overview
 
 - `pages/Extraction_Pipeline.py` — Streamlit page running the pipeline.
-- `app/services/` — integration services: `azure_service.py`, `reducto_service.py`, `local_template_service.py`, `reducto_schema_registry.py`, `ml_classify_service.py`.
+- `app/application/` — planning and pipeline.
+- `app/infrastructure/` — adapters for Azure/Reducto/local-template/ML/storage.
 - `app/resources/classifier_module/` — embedded FAISS + CLIP classification artifacts and APIs.
 - `local-templates/` — JSON coordinate templates.
 - `reducto_schema/` — JSON Schemas for Reducto extraction flows.
 - `uploads/` — persisted uploads (git‑ignored).
-

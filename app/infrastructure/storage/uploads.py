@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 import re
 import time
 from datetime import datetime
@@ -9,25 +8,18 @@ from typing import List, Dict, Any
 
 
 def get_uploads_dir() -> Path:
-    """Return the persistent uploads directory, creating it if missing."""
     d = Path("uploads")
     d.mkdir(parents=True, exist_ok=True)
     return d
 
 
 def _sanitize_filename(name: str) -> str:
-    # Keep alnum, dash, underscore, dot; collapse others to underscore
     name = name.strip().replace(" ", "_")
     name = re.sub(r"[^A-Za-z0-9._-]", "_", name)
-    # Avoid hidden files and empty names
     return name or "file"
 
 
 def save_uploaded_file(uploaded_file) -> Path:
-    """Persist a Streamlit UploadedFile to the local uploads directory.
-
-    Returns the saved file path (unique timestamped name to avoid collisions).
-    """
     uploads = get_uploads_dir()
     original = getattr(uploaded_file, "name", "uploaded.pdf")
     safe = _sanitize_filename(original)
@@ -52,7 +44,6 @@ def dir_size_bytes(path: Path | None = None) -> int:
             if p.is_file():
                 total += p.stat().st_size
         except FileNotFoundError:
-            # File might be removed concurrently
             continue
     return total
 
@@ -73,14 +64,6 @@ def cleanup_uploads(
     max_total_size_mb: int | None = None,
     max_files: int | None = None,
 ) -> Dict[str, Any]:
-    """Delete old uploads to control disk usage.
-
-    Strategy:
-    1) Age-based deletion (older than `max_age_days`).
-    2) Size cap: if total > `max_total_size_mb`, delete oldest until under cap.
-    3) Count cap: keep only most recent `max_files`.
-    Returns a summary with counts and bytes freed.
-    """
     uploads = get_uploads_dir()
     files: List[Path] = [p for p in uploads.glob("*") if p.is_file()]
 
@@ -95,7 +78,6 @@ def cleanup_uploads(
     deleted = []
     freed_bytes = 0
 
-    # 1) Age purge
     if max_age_days is not None and max_age_days >= 0:
         cutoff = time.time() - max_age_days * 86400
         to_delete = [e for e in entries if e["mtime"] < cutoff]
@@ -106,18 +88,15 @@ def cleanup_uploads(
                 freed_bytes += e["size"]
             except Exception:
                 pass
-        # Keep survivors
         survivors = [e for e in entries if e["mtime"] >= cutoff]
         entries = survivors
 
-    # Recompute totals
     total_size = sum(e["size"] for e in entries)
 
-    # 2) Size cap purge
     if max_total_size_mb is not None and max_total_size_mb >= 0:
         cap = max_total_size_mb * 1024 * 1024
         if total_size > cap:
-            for e in sorted(entries, key=lambda x: x["mtime"]):  # oldest first
+            for e in sorted(entries, key=lambda x: x["mtime"]):
                 if total_size <= cap:
                     break
                 try:
@@ -127,11 +106,9 @@ def cleanup_uploads(
                     freed_bytes += e["size"]
                 except Exception:
                     pass
-            # Refresh survivors after deletion
             survivors = [e for e in entries if e["path"].exists()]
             entries = survivors
 
-    # 3) Count cap purge
     if max_files is not None and max_files >= 0:
         if len(entries) > max_files:
             extras = sorted(entries, key=lambda x: x["mtime"])[: len(entries) - max_files]
@@ -151,3 +128,4 @@ def cleanup_uploads(
         "remaining_count": len(entries),
         "remaining_size_bytes": int(sum(e["size"] for e in entries if e["path"].exists())),
     }
+

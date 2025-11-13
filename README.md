@@ -1,6 +1,6 @@
 # Extraction Pipeline Setup Guide
 
-A Streamlit app and test scripts that demonstrate Reducto parsing alongside Azure Document Intelligence. This README covers local setup, environment configuration, running the app, a quick smoke test, and a Docker option for a reproducible run.
+A Streamlit app that classifies PDF pages and routes them to the right extraction engine (Azure Document Intelligence, Reducto schema, or a local coordinate template), then aggregates outputs into a single JSON. This README covers local setup, environment configuration, running the app, and Docker.
 
 ## Requirements
 
@@ -66,22 +66,11 @@ Required environment variables (names only): `REDUCTO_API_KEY`, `AZURE_DOC_AI_EN
 
 Notes:
 - Keep your `.env` untracked (see `.gitignore`).
-- Local development may rely on `python-dotenv` to load environment variables.
+- Configuration is centralized via `app/core/settings.py` (Pydantic Settings). Environment keys are loaded from `.env`.
 
 ## Quick Smoke Test (CLI)
 
-A minimal script that uploads a sample and runs Reducto (schema-based if available; otherwise parse), restricted to pages 18–19 of the provided multi-page sample.
-
-Run:
-
-```
-python testing_files/reducto_files/test_reducto.py
-```
-
-Notes:
-- Uses `.env` for `REDUCTO_API_KEY`.
-- Uploads `testing_files/sample_multiple.pdf`.
-- If a corporate proxy is set in the script, it will try to use it; if the proxy is not resolvable, it prints a message and falls back to direct with bounded timeouts.
+If you keep CLI utilities, ensure they import from `app/infrastructure` and `app/application` modules. Sample tests can classify a local PDF using the embedded classifier and run the pipeline.
 
 
 ### Rancher Desktop (Windows)
@@ -142,7 +131,7 @@ Open http://localhost:8501 in your browser.
 ## Proxy Options (Not required as of now)
 
 - Test script proxy: `testing_files/reducto_files/test_reducto.py` includes an optional proxy host; set `USE_PROXY = True` and `PROXY_HOST = "host:port"`. It DNS-checks the host and falls back to direct if unresolved.
-- App-wide proxy: The Reducto client is created in `app/services/reducto_service.py`. It currently disables environment proxy variables (`trust_env=False`) and only uses a proxy if passed explicitly to `create_client()`. If you need global proxy via env vars, set `trust_env=True` and/or accept a `REDUCTO_PROXY_URL` environment variable and pass it into `httpx.Client(proxy=...)`.
+- App-wide proxy: The Reducto client is created in `app/infrastructure/reducto_service.py`. It disables environment proxy variables by default (`trust_env=False`) and only uses a proxy if passed explicitly or configured in settings. If you need global proxy via env vars, provide `REDUCTO_USE_PROXY=true` and `REDUCTO_PROXY_URL=...` in `.env` (see `app/core/settings.py`).
 
 
 
@@ -155,22 +144,32 @@ Open http://localhost:8501 in your browser.
 
 ## Project Layout
 
-- `app/main.py` — Streamlit app orchestrator (upload, layout, tabs, triggers)
-- `app.py` — thin trampoline that calls `app/main.py`
-- `app/ui/` — tab UIs and helpers
-  - `azure_tab.py`, `reducto_tab.py`, `pymupdf_tab.py`
-  - `components.py` — small reusable UI utilities
-- `app/state/session.py` — typed `AppState` and `get_state()`
-- `app/services/reducto_service.py` — Reducto client creation and helpers
-- `app/services/azure_service.py` — Azure Document Intelligence helpers
-- `app/post_processing.py` — plugin loader + fallback for post-processor
-- `app/post_processors/1040_main/pp_1040_main.py` — 1040 JSON/CSV mapper (outputs to same folder)
-- `app/post_processors/schdc/pp_1040SchdC.py` — Schedule C JSON mapper (outputs to same folder)
-- `app/post_processors/azure_pipeline_A7SDEPR3_Input-20251105-094523.json` — sample pipeline JSON
-- `testing_files/reducto_files/test_reducto.py` — CLI smoke test
-- `requirements.txt` — pinned dependencies
-- `Dockerfile`, `.dockerignore` — containerization
- - `.pre-commit-config.yaml`, `pyproject.toml` — lint/type/test tooling config
+- UI
+  - `pages/Extraction_Pipeline.py` — Thin Streamlit page. Upload → calls `app/application/pipeline.py` → renders.
+  - `app/ui/components.py` — UI helpers (upload, download button, minor utilities).
+- Core
+  - `app/core/settings.py` — Typed Pydantic Settings (Azure, Reducto, Uploads, PyMuPDF).
+- Domain
+  - `app/domain/models.py` — ClassifiedPage, AzureJob, PagePlan dataclasses.
+- Application (use cases)
+  - `app/application/planning.py` — build_page_plan(classified).
+  - `app/application/pipeline.py` — run_pipeline(pdf) orchestrates classify → plan → execute → aggregate (+ post-process).
+- Infrastructure (adapters)
+  - `app/infrastructure/azure_service.py` — Azure client + analyze + serialization helpers.
+  - `app/infrastructure/reducto_service.py` — Reducto client + parse/extract helpers.
+  - `app/infrastructure/reducto_schema_registry.py` — schema discovery and prompts.
+  - `app/infrastructure/local_template_service.py` — PyMuPDF+OCR local template extraction.
+  - `app/infrastructure/ml_classify_service.py` — ML classifier wrapper (FAISS + CLIP).
+  - `app/infrastructure/storage/uploads.py` — uploads persistence and cleanup.
+- Plugins
+  - `app/plugins/registry.py` — post-processor registry (select/run).
+  - `app/plugins/post_processors/azure/form_1040.py` — 1040 mapper.
+  - `app/plugins/post_processors/azure/form_schedule_c.py` — Schedule C mapper.
+- Resources
+  - `app/resources/classifier_module/...` — embedded classifier artifacts.
+- Other
+  - `requirements.txt`, `Dockerfile`, `.dockerignore`
+  - `docs/` — technical overview and design notes (updated to current layout).
 
 ## License
 

@@ -1,11 +1,5 @@
 from __future__ import annotations
 
-"""Post-processor plugin utilities.
-
-Provides a small indirection layer so the pipeline UI can select and run
-post-processors based on ML label, base_label, or model id.
-"""
-
 from importlib import import_module
 from typing import Any, Callable, Optional
 
