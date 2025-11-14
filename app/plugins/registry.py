@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 from importlib import import_module
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Optional, Dict
 
-from app.config_classifier_ml_labels import (
-    POSTPROCESSOR_BY_BASE_LABEL,
-    POSTPROCESSOR_BY_LABEL,
-    POSTPROCESSOR_BY_MODEL_PREFIX,
-)
+# Post-processor selection maps
+# Precedence: LABEL → BASE_LABEL → MODEL_PREFIX
+POSTPROCESSOR_BY_LABEL: Dict[str, str] = {}
+POSTPROCESSOR_BY_BASE_LABEL: Dict[str, str] = {
+    "Form_1040": "app.plugins.post_processors.azure.form_1040:postprocess_combined",
+    "Schedule_C": "app.plugins.post_processors.azure.form_schedule_c:postprocess_combined",
+}
+POSTPROCESSOR_BY_MODEL_PREFIX: Dict[str, str] = {}
 
 
 def load_callable(spec: str) -> Callable[..., Any]:
@@ -47,4 +50,3 @@ def run_postprocessor(spec: str, combined: dict, output_dir=None, **options) -> 
     """
     fn = load_callable(spec)
     return fn(combined, output_dir, options)
-

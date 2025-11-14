@@ -13,7 +13,7 @@ from pathlib import Path
 
 # Ensure project root is on sys.path when running this page directly
 try:  # noqa: SIM105
-    from app.application.pipeline import run_pipeline
+    from app.application.pipeline import run_pipeline, preview_pipeline
 except ModuleNotFoundError:  # Running via `streamlit run pages/Extraction_Pipeline.py`
     import sys as _sys
     from pathlib import Path as _Path
@@ -21,7 +21,7 @@ except ModuleNotFoundError:  # Running via `streamlit run pages/Extraction_Pipel
     _ROOT = _Path(__file__).resolve().parents[1]
     if str(_ROOT) not in _sys.path:
         _sys.path.insert(0, str(_ROOT))
-    from app.application.pipeline import run_pipeline
+    from app.application.pipeline import run_pipeline, preview_pipeline
 
 from app.ui.components import download_json_button, file_uploader
 from app.infrastructure.storage.uploads import save_uploaded_file
@@ -51,6 +51,20 @@ def run() -> None:
             data=st.session_state.get("combined_out"),
             filename=f"azure_pipeline_{Path(pdf_path).stem}.json",
         )
+
+    # Preview classification and plan (thin UI: uses application layer)
+    try:
+        preview = preview_pipeline(Path(pdf_path))
+        with st.expander("Classification (ML labels)", expanded=False):
+            st.json(preview.get("classified", []))
+        with st.expander("Details: page plan (preview)", expanded=False):
+            st.json({
+                "file_name": Path(pdf_path).name,
+                "page_plan": preview.get("page_plan", []),
+            })
+    except Exception:
+        # If preview fails (e.g., missing ML artifacts), omit preview gracefully
+        pass
 
     if st.button("Run Extraction", type="primary"):
         result = run_pipeline(Path(pdf_path), use_jsonic_dependents=use_jsonic_dependents)

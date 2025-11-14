@@ -4,7 +4,7 @@ from typing import List, Tuple, Dict, Optional
 import re
 
 from app.domain.models import ClassifiedPage, AzureJob, PagePlan
-from app.config_classifier_ml_labels import ML_LABEL_MODEL_MAP
+from app.application.routing import ML_LABEL_MODEL_MAP
 
 
 def _select_model_for_page(label: str, base_label: Optional[str]) -> Optional[str]:
@@ -128,4 +128,3 @@ def build_page_plan(classified: List[ClassifiedPage]) -> Tuple[List[AzureJob], L
 
     plan.sort(key=lambda x: x.page)
     return jobs, plan
-

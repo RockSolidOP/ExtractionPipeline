@@ -247,3 +247,16 @@ def run_pipeline(pdf_path: Path, *, use_jsonic_dependents: bool = False) -> Dict
         "combined_out": combined_out,
         "timings": timings,
     }
+
+
+def preview_pipeline(pdf_path: Path) -> Dict[str, Any]:
+    """Return a lightweight preview of classification and page plan before execution.
+
+    Keeps UI thin by centralizing classification + planning in the application layer.
+    """
+    classified = _classify_document(Path(pdf_path))
+    _, page_plan = build_page_plan(classified)
+    return {
+        "classified": [asdict(c) for c in classified],
+        "page_plan": [asdict(p) for p in page_plan],
+    }

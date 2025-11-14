@@ -78,10 +78,8 @@ This document maps the codebase into concrete responsibilities, data models, and
 
 ## Routing and Skip Logic
 
-- Mapping: `ExtractionPipeline/app/config_classifier_ml_labels.py`
-  - `ML_LABEL_MODEL_MAP` maps exact ML labels to model IDs.
-    - Examples: 1040 P1/P2 → prebuilt 1040; Schedule C → prebuilt Schedule C; asset reports → `reducto:schema:auto`.
-  - `SKIP_LABELS` lists labels to ignore (no job creation).
+- Mapping: `app/application/routing.py`
+  - `ML_LABEL_MODEL_MAP` maps exact ML labels to engine selectors (e.g., Azure prebuilt, local-template, reducto:schema).
 
 ## Utilities and UI helpers
 

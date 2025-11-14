@@ -62,7 +62,7 @@ This project provides a Streamlit UI that classifies pages of a PDF and routes t
 ## Configuration Surfaces
 
 - Cloud credentials: `REDUCTO_API_KEY`, `AZURE_DOC_AI_ENDPOINT`, `AZURE_DOC_AI_KEY` via `.env`.
-- Routing: `app/config_classifier_ml_labels.py` (label → model).
+- Routing: `app/application/routing.py` (label → model).
 - Reducto behavior: options surfaced via `app/core/settings.py`.
 - Azure behavior: prebuilt model ids via `app/core/settings.py`.
 
