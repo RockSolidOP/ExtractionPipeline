@@ -54,8 +54,10 @@ class ReductoSettings(BaseSettings):
     use_proxy: bool = False
     proxy_url: Optional[str] = None
     connect_timeout: float = 10.0
-    read_timeout: float = 60.0
-    write_timeout: float = 30.0
+    # Allow long‑running Reducto calls by default.
+    # These can still be overridden via REDUCTO_READ_TIMEOUT / REDUCTO_WRITE_TIMEOUT.
+    read_timeout: float = 180.0
+    write_timeout: float = 60.0
     pool_timeout: float = 10.0
     max_retries: int = 1
 
@@ -118,4 +120,3 @@ class Settings(BaseSettings):
 # Instantiate a process-wide settings object. Import as:
 #   from app.core.settings import settings
 settings = Settings()
-

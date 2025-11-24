@@ -75,4 +75,3 @@ This project provides a Streamlit UI that classifies pages of a PDF and routes t
 
 - The ML classifier relies on a prebuilt FAISS index; it does not train on the fly.
 - The local coordinate template mode requires PyMuPDF and, for OCR fallback, Tesseract installed on the host.
-- Some 1040 schedules may be intentionally skipped via `SKIP_LABELS` until routing and post‑processing are finalized.
